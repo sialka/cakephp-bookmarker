@@ -229,3 +229,189 @@ Para criar a view criaremos o arquivo **tags.ctp**, que deverá ficar na pasta
 <?php endforeach; ?>
 </section>
 ```
+
+## 6. Adicionando Login
+
+Para criar o Login faremos atravez de um componente.
+Como o acesso ao sistema depende do usuário estar logado, vamos alterar o AppController.
+
+### 6.1 Editando o AppController
+
+**Em src/Controller/AppController.php**
+
+```php
+namespace App\Controller;
+
+use Cake\Controller\Controller;
+
+class AppController extends Controller
+{
+  public function initialize()
+  {
+    $this->loadComponent('Flash');
+    $this->loadComponent('Auth', [
+      'authenticate' => [
+        'Form' => [
+          'fields' => [
+            'username' => 'email',
+            'password' => 'password'
+          ]
+        ]
+      ],
+      'loginAction' => [
+        'controller' => 'Users',
+        'action' => 'login'
+      ]
+    ]);
+    // Permite a ação display, assim nosso pages controller
+    // continua a funcionar.
+    $this->Auth->allow(['display']);
+    }
+  }
+```
+
+### 6.2 Editando o UsersController
+
+**Em src/Controller/UsersController.php**
+
+Criando os métodos de login e logou no controller de Users.
+
+```php
+<?php
+
+namespace App\Controller;
+
+use App\Controller\AppController;
+
+class UsersController extends AppController
+{
+  ...
+    public function login()
+    {
+        if ($this->request->is('post')) {
+            $user = $this->Auth->identify();
+            if ($user) {
+                $this->Auth->setUser($user);
+                return $this->redirect($this->Auth->redirectUrl());
+            }
+            $this->Flash->error('Your username or password is incorrect.');
+        }
+    }
+
+    public function logout()
+    {
+        $this->Flash->success('You are now logged out.');
+        return $this->redirect($this->Auth->logout());
+    }
+  ...
+}
+```
+
+### 6.3 Criando o Template de Login
+
+Em **src/Template/Users/login.ctp** adicione o seguinte trecho:
+
+```html
+<h1>Login</h1>
+<?= $this->Form->create() ?>
+<?= $this->Form->input('email') ?>
+<?= $this->Form->input('password') ?>
+<?= $this->Form->button('Login') ?>
+<?= $this->Form->end() ?>
+```
+
+### 6.4 Permitindo cadastro de novos usuarios
+
+Para que consigamos criar um usuario para utilizar o sistema vamos informar que a rota /users/add não refer autenticação.
+
+**Em src/Controller/UsersController.php**
+
+```php
+public function beforeFilter(\Cake\Event\Event $event)
+{
+  $this->Auth->allow(['add']);
+}
+```
+
+## 7. Restringindo Acesso
+
+Em **AppController** adicione o seguinte:
+
+```php
+public function isAuthorized($user)
+{
+  return false;
+}
+```
+
+Adicionar na function initialize() o **'authorize' => 'Controller'**.
+
+```php
+<?php
+namespace App\Controller;
+
+...
+
+class AppController extends Controller
+{
+
+  public function initialize()
+  {
+
+    $this->loadComponent('Flash');
+    $this->loadComponent('Auth', [
+      'authorize' => 'Controller',
+      'authenticate' => [
+        'Form' => [
+          'fields' => [
+              'username' => 'email',
+              'password' => 'password'
+              ]
+          ]
+      ],
+      'loginAction' => [
+        'controller' => 'Users',
+        'action' => 'login'
+      ]
+    ]);
+    ...
+  }
+  ...
+}
+```
+
+Em seu BookmarksController adicione o seguinte:
+
+```php
+<?php
+
+namespace App\Controller;
+
+use App\Controller\AppController;
+
+class BookmarksController extends AppController
+{
+  ...
+
+  public function isAuthorized($user)
+  {
+      $action = $this->request->params['action'];
+      // As ações add e index são permitidas sempre.
+      if (in_array($action, ['index', 'add', 'tags'])) {
+          return true;
+      }
+      // Todas as outras ações requerem um id.
+      if (!$this->request->getParam('pass.0')) {
+          return false;
+      }
+      // Checa se o bookmark pertence ao user atual.
+      $id = $this->request->getParam('pass.0');
+      $bookmark = $this->Bookmarks->get($id);
+      if ($bookmark->user_id == $user['id']) {
+          return true;
+      }
+      return parent::isAuthorized($user);
+  }
+```
+
+pagina 61
